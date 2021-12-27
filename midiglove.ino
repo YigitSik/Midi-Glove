@@ -1,6 +1,8 @@
 #include "midi.h"
-#include <MPU6050_tockn.h>
+#include "MPU6050.h"
+#include "I2Cdev.h"
 #include <Wire.h>
+#include <time.h>
 
 const byte flexPin = A0; //pin A0 to read analog input
 const byte joystickXPin = A4;
@@ -27,51 +29,92 @@ float joystickX;
 float joystickY;
 byte joystickButton;
 
-const byte octaveStep = 12;
+const byte octaveStep = 11;
 byte octave = 60;
 byte currentNote;
-//byte oldNote;
+byte velocityValue;
 
-MPU6050 mpu6050(Wire);
+unsigned long start_time;
+unsigned long timed_event;
+unsigned long current_time;
+
+MPU6050 accelgyro;
+
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
 
 void setup() {
-  Serial.begin(9600);
-  pinMode(joystickButtonPin, INPUT_PULLUP);
+  Serial.begin(115200);
+  pinMode(joystickButtonPin, INPUT);
   Wire.begin();
-  mpu6050.begin();
-  mpu6050.calcGyroOffsets(true);
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+  Wire.begin();
+#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+  Fastwire::setup(400, true);
+#endif
+
+  accelgyro.initialize();
+
+  timed_event = 100; // after 1000 ms trigger the event
+  current_time = millis();
+  start_time = current_time;
 }
 
 void loop() {
-  checkFlexSensor();
-  checkImu();
-  checkJoystick();
+
+ accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // Serial.println(ax); //-6000 down 10000 up pitch angle
+  //       Serial.println(ay); // -10000 left 16000 right roll
+  //        Serial.println(az);
+  //          Serial.println(gx); // +10000 up -10000 down pitch
+  //         delay(200);
+  //        Serial.println(gy);
+  //     Serial.println(gz); //30000 left -30000 right yaw
+
+//Serial.println(value);
+
+    checkFlexSensor();
+    checkJoystick();
+    checkImu();
+
+delay(100);
 }
+
+//void timer() {
+//
+//  int milli_seconds = 1000 * 1;
+//  current_time = millis(); // update the timer every cycle
+//
+//  if (current_time - start_time >= timed_event) {
+//    //    Serial.println("Timer expired, resetting"); // the event to trigger
+//    start_time = current_time;  // reset the timer
+//  }
+//}
 
 void checkFlexSensor() {
 
+  joystickX = analogRead(joystickXPin);
+  Serial.println(joystickX);
   value = analogRead(flexPin);
   value = map(value, 700, 900, 0, 500); //Map value 0-1023 to 0-255 (PWM)
-
+  velocityValue = map(joystickX, 0, 1023, 127, 0);  
+  
+  
 
   if (value > 300 && cond == false) {
 
-
-    rollAccel = mpu6050.getAccX();
-    rollAngle = mpu6050.getAngleX();
-    rollGyro = mpu6050.getGyroX();
-
-    byte rollValue = map(rollAngle, -40, 60, 0, 11);
+    byte rollValue = map(ay, -10000, 16000, 0, 11);
 
     currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
 
-    send_midi(NOTE_ON, currentNote, 0x45);
+    send_midi(NOTE_ON, currentNote, velocityValue);
     cond = true;
 
 
   }
   else if (value < 300 && cond == true) {
-    send_midi(NOTE_OFF, currentNote, 0x45);
+    send_midi(NOTE_OFF, currentNote, velocityValue);
     cond = false;
   }
 
@@ -123,64 +166,60 @@ byte getClosest(byte val1, byte val2,
 
 void checkJoystick() {
 
-  joystickX = analogRead(joystickXPin);
-  joystickY = analogRead(joystickYpin);
-  joystickButton = digitalRead(joystickButtonPin);
+  //joystickY = analogRead(joystickYpin);
+  //joystickButton = digitalRead(joystickButtonPin);
 
-  //Serial.print(joystickX);
+  //Serial.println(joystickX);
   //Serial.print(joystickY);
   //Serial.println(joystickButton);
 
-  bool isJoystickPushed = false;
+//  bool isJoystickPushed = false;
+//  int pitchValue;
 
-  int pitchValue;
-
-  if (!digitalRead(joystickButtonPin)) {
-    isJoystickPushed = true;
-    pitchValue = mpu6050.getGyroZ();
-    pitchValue = map(pitchValue , 200, -200, 0x00, 0x60);
-
-    if (pitchValue > 0x00 && pitchValue < 0x60) {
-      Serial.write(0xE0);
-      Serial.write(0x00);
-      Serial.write(pitchValue);
-      delay(50);
-    }
-
-  }
-
-  if ( isJoystickPushed && digitalRead(joystickButtonPin)) {
-    send_midi(NOTE_OFF, currentNote, 0x45);
-  }
+//  if (!digitalRead(joystickButtonPin)) {
+//    isJoystickPushed = true;
+//    pitchValue = map(gz , 25000, -25000, 0x00, 0x60);
+//
+//    Serial.println("sdfdd");
+//
+//    if (pitchValue > 0x00 && pitchValue < 0x60) {
+//      Serial.write(0xE0);
+//      Serial.write(0x00);
+//      Serial.write(pitchValue);
+//      Serial.println("sdfd");
+//      delay(20);
+//    }
+//  }
+//
+//  if (isJoystickPushed && digitalRead(joystickButtonPin)) {
+//    send_midi(NOTE_OFF, currentNote, velocityValue);
+//  }
 
 }
 
 void checkImu() {
-  mpu6050.update();
-
-  pitchGyro = mpu6050.getGyroY();
-  pitchAccel = mpu6050.getAccAngleY();
-  pitchAngle = mpu6050.getAngleY();
-
-  yawAccel = mpu6050.getAccZ();
-  yawGyro = mpu6050.getGyroZ();
-  yawAngle = mpu6050.getAngleZ();
 
 
-  if ( pitchGyro < -300) {
-    //    Serial.println("Pitch Up");
+  if ( gx > 10000 && ax > 10000) { //+0.50 accelx
     octave = octave + octaveStep;
+    Serial.println("pitch up");
   }
-  else if (pitchGyro > 300 ) {
-    //    Serial.println("Pitch Down");
+  else if (gx < -10000 && ax < -6000) { //-0.40 accelx
+
     octave = octave - octaveStep;
+    Serial.println("pitch down");
   }
 
-  if (yawGyro > 300) {
-    //    Serial.println("Yaw Left");
+  if (gz > 25000) { //30
+    Serial.println("Yaw Left");
+    //    Serial.write(INSTRUMENT );
+    //    Serial.write(5);
+
   }
-  else if ( yawGyro < -300) {
-    //    Serial.println("Yaw Right");
+  else if ( gz < -25000) {
+    Serial.println("Yaw Right");
+    //    Serial.write(INSTRUMENT );
+    //    Serial.write(7);
   }
 
   //  if(roll > 1.80 && rollAngle > 45){
@@ -200,8 +239,6 @@ void checkImu() {
   //    Serial.write(0x20);
   //    Serial.write(0x01);
   //
-  //    Serial.write(INSTRUMENT );
-  //    Serial.write(index);
 
 
   //    Serial.write(0xB0);
