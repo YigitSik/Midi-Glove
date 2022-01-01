@@ -27,15 +27,17 @@ float joystickX;
 float joystickY;
 byte joystickButton;
 
+byte scaleIndex = 0;
+byte currentScale[8];
+
 const byte octaveStep = 12;
 byte octave = 60;
 byte currentNote;
-//byte oldNote;
 
 MPU6050 mpu6050(Wire);
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(joystickButtonPin, INPUT_PULLUP);
   Wire.begin();
   mpu6050.begin();
@@ -54,23 +56,39 @@ void checkFlexSensor() {
   value = map(value, 700, 900, 0, 500); //Map value 0-1023 to 0-255 (PWM)
 
 
-  if (value > 300 && cond == false) {
-
+  if (value > 400 && cond == false) {
 
     rollAccel = mpu6050.getAccX();
     rollAngle = mpu6050.getAngleX();
     rollGyro = mpu6050.getGyroX();
 
-    byte rollValue = map(rollAngle, -40, 60, 0, 11);
+    byte rollValue = map(rollAngle, -40, 60, 0, 11)%11;
 
-    currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
+    Serial.println(rollValue);
+
+    switch (scaleIndex) {
+      case 0:
+        currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      case 1:
+        currentNote = (findClosestValue(minorScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      case 2:
+        currentNote = (findClosestValue(harmonicMinorScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      case 3:
+        currentNote = (findClosestValue(phrygianDominantScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      default:
+        currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
+    }
 
     send_midi(NOTE_ON, currentNote, 0x45);
     cond = true;
 
 
   }
-  else if (value < 300 && cond == true) {
+  else if (value < 350 && cond == true) {
     send_midi(NOTE_OFF, currentNote, 0x45);
     cond = false;
   }
@@ -123,8 +141,8 @@ byte getClosest(byte val1, byte val2,
 
 void checkJoystick() {
 
-  joystickX = analogRead(joystickXPin);
-  joystickY = analogRead(joystickYpin);
+//  joystickX = analogRead(joystickXPin);
+//  joystickY = analogRead(joystickYpin);
   joystickButton = digitalRead(joystickButtonPin);
 
   //Serial.print(joystickX);
@@ -149,14 +167,14 @@ void checkJoystick() {
 
   }
 
-  if ( isJoystickPushed && digitalRead(joystickButtonPin)) {
+  if (isJoystickPushed && digitalRead(joystickButtonPin)) {
     send_midi(NOTE_OFF, currentNote, 0x45);
   }
 
 }
 
 void checkImu() {
-  mpu6050.update();
+ mpu6050.update();
 
   pitchGyro = mpu6050.getGyroY();
   pitchAccel = mpu6050.getAccAngleY();
@@ -177,36 +195,10 @@ void checkImu() {
   }
 
   if (yawGyro > 300) {
-    //    Serial.println("Yaw Left");
+    scaleIndex = (scaleIndex + 1) % 4;
   }
   else if ( yawGyro < -300) {
-    //    Serial.println("Yaw Right");
+    scaleIndex = (scaleIndex - 1) % 4;
   }
-
-  //  if(roll > 1.80 && rollAngle > 45){
-  //    Serial.println("Roll Right");
-  //    delay(3000);
-  //  }
-  //  else if(roll <-1.80 && rollAngle <-45){
-  //    Serial.println("Roll Left");
-  //    delay(3000);
-  //  }
-
-  //    Serial.write(0xB0);
-  //    Serial.write(0x00);
-  //    Serial.write(0x01);
-  //
-  //    Serial.write(0xB0);
-  //    Serial.write(0x20);
-  //    Serial.write(0x01);
-  //
-  //    Serial.write(INSTRUMENT );
-  //    Serial.write(index);
-
-
-  //    Serial.write(0xB0);
-  //    Serial.write(0x07); // VOLUME
-  //    Serial.write(index);
-
 
 }
