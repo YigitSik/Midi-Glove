@@ -13,18 +13,6 @@ int value;
 byte majorScaleLength = majorScaleLength = sizeof(majorScale) / sizeof(majorScale[0]);;
 bool cond = false;
 
-float pitchGyro;
-float pitchAccel;
-float pitchAngle;
-
-float rollGyro;
-float rollAccel;
-float rollAngle;
-
-float yawGyro;
-float yawAccel;
-float yawAngle;
-
 float joystickX;
 float joystickY;
 byte joystickButton;
@@ -44,8 +32,8 @@ int16_t ax, ay, az;
 int16_t gx, gy, gz;
 
 void setup() {
-  Serial.begin(115200);
-  pinMode(joystickButtonPin, INPUT);
+  Serial.begin(9600);
+  pinMode(joystickButtonPin, INPUT_PULLUP);
   Wire.begin();
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
   Wire.begin();
@@ -62,7 +50,7 @@ void setup() {
 
 void loop() {
 
- accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+  accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
   // Serial.println(ax); //-6000 down 10000 up pitch angle
   //       Serial.println(ay); // -10000 left 16000 right roll
@@ -72,14 +60,13 @@ void loop() {
   //        Serial.println(gy);
   //     Serial.println(gz); //30000 left -30000 right yaw
 
-//Serial.println(value);
+  //Serial.println(value);
 
-    checkFlexSensor();
-    checkJoystick();
-    checkImu();
+  checkFlexSensor();
+  checkJoystick();
+  checkImu();
 
-delay(100);
-}
+ }
 
 //void timer() {
 //
@@ -98,9 +85,9 @@ void checkFlexSensor() {
   Serial.println(joystickX);
   value = analogRead(flexPin);
   value = map(value, 700, 900, 0, 500); //Map value 0-1023 to 0-255 (PWM)
-  velocityValue = map(joystickX, 0, 1023, 127, 0);  
-  
-  
+  velocityValue = map(joystickX, 0, 1023, 127, 0);
+
+
 
   if (value > 300 && cond == false) {
 
@@ -110,7 +97,6 @@ void checkFlexSensor() {
 
     send_midi(NOTE_ON, currentNote, velocityValue);
     cond = true;
-
 
   }
   else if (value < 300 && cond == true) {
@@ -166,34 +152,32 @@ byte getClosest(byte val1, byte val2,
 
 void checkJoystick() {
 
-  //joystickY = analogRead(joystickYpin);
-  //joystickButton = digitalRead(joystickButtonPin);
+  joystickY = analogRead(joystickYpin);
+  joystickButton = digitalRead(joystickButtonPin);
 
-  //Serial.println(joystickX);
-  //Serial.print(joystickY);
-  //Serial.println(joystickButton);
+  Serial.println(joystickX);
+  Serial.print(joystickY);
+  Serial.println(joystickButton);
 
-//  bool isJoystickPushed = false;
-//  int pitchValue;
+  bool isJoystickPushed = false;
+  int pitchValue;
 
-//  if (!digitalRead(joystickButtonPin)) {
-//    isJoystickPushed = true;
-//    pitchValue = map(gz , 25000, -25000, 0x00, 0x60);
-//
-//    Serial.println("sdfdd");
-//
-//    if (pitchValue > 0x00 && pitchValue < 0x60) {
-//      Serial.write(0xE0);
-//      Serial.write(0x00);
-//      Serial.write(pitchValue);
-//      Serial.println("sdfd");
-//      delay(20);
-//    }
-//  }
-//
-//  if (isJoystickPushed && digitalRead(joystickButtonPin)) {
-//    send_midi(NOTE_OFF, currentNote, velocityValue);
-//  }
+  if (!digitalRead(joystickButtonPin)) {
+    isJoystickPushed = true;
+    pitchValue = map(gz , 25000, -25000, 0x00, 0x60);
+
+
+    if (pitchValue > 0x00 && pitchValue < 0x60) {
+      Serial.write(PITCH);
+      Serial.write(0x00);
+      Serial.write(pitchValue);
+      delay(20);
+    }
+  }
+
+  if (isJoystickPushed && digitalRead(joystickButtonPin)) {
+    send_midi(NOTE_OFF, currentNote, velocityValue);
+  }
 
 }
 
@@ -212,38 +196,13 @@ void checkImu() {
 
   if (gz > 25000) { //30
     Serial.println("Yaw Left");
-    //    Serial.write(INSTRUMENT );
-    //    Serial.write(5);
 
   }
   else if ( gz < -25000) {
     Serial.println("Yaw Right");
-    //    Serial.write(INSTRUMENT );
-    //    Serial.write(7);
+
   }
 
-  //  if(roll > 1.80 && rollAngle > 45){
-  //    Serial.println("Roll Right");
-  //    delay(3000);
-  //  }
-  //  else if(roll <-1.80 && rollAngle <-45){
-  //    Serial.println("Roll Left");
-  //    delay(3000);
-  //  }
-
-  //    Serial.write(0xB0);
-  //    Serial.write(0x00);
-  //    Serial.write(0x01);
-  //
-  //    Serial.write(0xB0);
-  //    Serial.write(0x20);
-  //    Serial.write(0x01);
-  //
-
-
-  //    Serial.write(0xB0);
-  //    Serial.write(0x07); // VOLUME
-  //    Serial.write(index);
 
 
 }
