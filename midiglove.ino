@@ -6,21 +6,23 @@
 
 const byte flexPin = A0; //pin A0 to read analog input
 const byte joystickXPin = A4;
-const byte joystickYpin = A5;
 const byte joystickButtonPin = 2;
+
 
 int value;
 byte majorScaleLength = majorScaleLength = sizeof(majorScale) / sizeof(majorScale[0]);;
 bool cond = false;
 
-float joystickX;
-float joystickY;
+int joystickX;
 byte joystickButton;
 
 const byte octaveStep = 11;
 byte octave = 60;
 byte currentNote;
 byte velocityValue;
+
+byte scaleIndex = 0;
+byte currentScale[8];
 
 unsigned long start_time;
 unsigned long timed_event;
@@ -43,63 +45,59 @@ void setup() {
 
   accelgyro.initialize();
 
-  timed_event = 100; // after 1000 ms trigger the event
+  timed_event = 500; // after 1000 ms trigger the event
   current_time = millis();
   start_time = current_time;
+
 }
 
 void loop() {
 
   accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
 
-  // Serial.println(ax); //-6000 down 10000 up pitch angle
-  //       Serial.println(ay); // -10000 left 16000 right roll
-  //        Serial.println(az);
-  //          Serial.println(gx); // +10000 up -10000 down pitch
-  //         delay(200);
-  //        Serial.println(gy);
-  //     Serial.println(gz); //30000 left -30000 right yaw
-
-  //Serial.println(value);
-
   checkFlexSensor();
   checkJoystick();
   checkImu();
 
- }
 
-//void timer() {
-//
-//  int milli_seconds = 1000 * 1;
-//  current_time = millis(); // update the timer every cycle
-//
-//  if (current_time - start_time >= timed_event) {
-//    //    Serial.println("Timer expired, resetting"); // the event to trigger
-//    start_time = current_time;  // reset the timer
-//  }
-//}
+}
+
 
 void checkFlexSensor() {
 
   joystickX = analogRead(joystickXPin);
-  Serial.println(joystickX);
   value = analogRead(flexPin);
-  value = map(value, 700, 900, 0, 500); //Map value 0-1023 to 0-255 (PWM)
+  value = map(value, 700, 900, 0, 200); //Map value 0-1023 to 0-255 (PWM)
   velocityValue = map(joystickX, 0, 1023, 127, 0);
 
-
-
-  if (value > 300 && cond == false) {
+  if (value > 180 && cond == false) {
 
     byte rollValue = map(ay, -10000, 16000, 0, 11);
 
-    currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
+    Serial.println(rollValue);
+
+    switch (scaleIndex) {
+      case 0:
+        currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      case 1:
+        currentNote = (findClosestValue(minorScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      case 2:
+        currentNote = (findClosestValue(harmonicMinorScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      case 3:
+        currentNote = (findClosestValue(phrygianDominantScale, majorScaleLength, rollValue) + octave) % 127;
+        break;
+      default:
+        currentNote = (findClosestValue(majorScale, majorScaleLength, rollValue) + octave) % 127;
+    }
 
     send_midi(NOTE_ON, currentNote, velocityValue);
     cond = true;
 
   }
-  else if (value < 300 && cond == true) {
+  else if (value < 155 && cond == true) {
     send_midi(NOTE_OFF, currentNote, velocityValue);
     cond = false;
   }
@@ -152,13 +150,6 @@ byte getClosest(byte val1, byte val2,
 
 void checkJoystick() {
 
-  joystickY = analogRead(joystickYpin);
-  joystickButton = digitalRead(joystickButtonPin);
-
-  Serial.println(joystickX);
-  Serial.print(joystickY);
-  Serial.println(joystickButton);
-
   bool isJoystickPushed = false;
   int pitchValue;
 
@@ -171,7 +162,6 @@ void checkJoystick() {
       Serial.write(PITCH);
       Serial.write(0x00);
       Serial.write(pitchValue);
-      delay(20);
     }
   }
 
@@ -183,26 +173,47 @@ void checkJoystick() {
 
 void checkImu() {
 
+  if ( gx < -10000 && ax > 6000  ) {
 
-  if ( gx > 10000 && ax > 10000) { //+0.50 accelx
-    octave = octave + octaveStep;
-    Serial.println("pitch up");
-  }
-  else if (gx < -10000 && ax < -6000) { //-0.40 accelx
+    current_time = millis();
 
-    octave = octave - octaveStep;
-    Serial.println("pitch down");
-  }
 
-  if (gz > 25000) { //30
-    Serial.println("Yaw Left");
+    if (current_time - start_time >= timed_event) {
+      octave = octave + octaveStep;
+      start_time = current_time;
+    }
 
   }
-  else if ( gz < -25000) {
-    Serial.println("Yaw Right");
+  else if (gx > 10000 && ax < -6000  ) {
+
+    current_time = millis();
+
+    if (current_time - start_time >= timed_event) {
+      octave = octave - octaveStep;
+      start_time = current_time;
+    }
 
   }
 
+  if (gz > 25000  ) {
 
+    current_time = millis();
+
+    if (current_time - start_time >= timed_event) {
+      scaleIndex = (scaleIndex + 1) % 4;
+      start_time = current_time;
+    }
+
+  }
+  else if ( gz < -25000  ) {
+
+    current_time = millis();
+
+    if (current_time - start_time >= timed_event) {
+      scaleIndex = (scaleIndex - 1) % 4;
+      start_time = current_time;
+    }
+
+  }
 
 }
